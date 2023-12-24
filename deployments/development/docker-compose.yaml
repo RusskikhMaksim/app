@@ -1,0 +1,15 @@
+version: '3'
+
+services:
+  api:
+    build:
+      context: ../../
+      dockerfile: deployments/development/Dockerfile
+    volumes:
+      - ../../:/app/
+    env_file:
+      - .env
+    environment:
+      LD_FLAGS: -X 'main.branchName=$(git rev-parse --abbrev-ref HEAD)'
+    ports:
+      - ${APPLICATION_PORT}:${APPLICATION_PORT}
