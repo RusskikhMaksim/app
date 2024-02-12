@@ -7,9 +7,39 @@ services:
       dockerfile: deployments/development/Dockerfile
     volumes:
       - ../../:/app/
-    env_file:
-      - .env
+      - .env:/app/.env
     environment:
       LD_FLAGS: -X 'main.branchName=$(git rev-parse --abbrev-ref HEAD)'
     ports:
-      - ${APPLICATION_PORT}:${APPLICATION_PORT}
+      - ${APPLICATION_PORT}${APPLICATION_PORT}
+
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_storage:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    environment:
+      MINIO_ROOT_USER: user
+      MINIO_ROOT_PASSWORD: password
+    command: server --console-address ":9001" /data
+
+  createbucket:
+    image: minio/mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc config host add minio http://minio:9000 ${S3_API_USER} ${S3_API_PASSWORD};
+      /usr/bin/mc mb minio/companies;
+      exit 0;
+      "
+
+volumes:
+  minio_storage: { }

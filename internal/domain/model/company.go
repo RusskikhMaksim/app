@@ -1,4 +1,4 @@
-package main
+package model
 
 type ID struct {
 	Oid string `json:"$oid"`
