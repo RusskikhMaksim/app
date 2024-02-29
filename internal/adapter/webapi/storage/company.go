@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"app/internal/domain/repository"
 	"bytes"
 	"context"
 	"fmt"
@@ -44,24 +45,30 @@ func (r *CompanyRepository) Create(
 	ctx context.Context,
 	data []byte,
 	companyName string,
-) error {
+) (*repository.CompanyRepositoryCreateResponse, error) {
 	r.mux.Lock()
 	defer r.mux.Unlock()
+
 	reader := bytes.NewReader(data)
+	name := fmt.Sprintf("%s.json", companyName)
+
 	info, err := r.client.PutObject(
 		ctx,
 		r.config.Bucket.Name,
-		fmt.Sprintf("%s.json", companyName),
+		name,
 		reader,
 		reader.Size(),
 		minio.PutObjectOptions{ContentType: "application/json"},
 	)
 
 	if err != nil {
-		return fmt.Errorf("failed to create company: %s", err.Error())
+		return nil, fmt.Errorf("failed to create company: %s", err.Error())
 	}
 
 	log.Printf("%+v", info)
 
-	return nil
+	return &repository.CompanyRepositoryCreateResponse{
+		Bucket: r.config.Bucket.Name,
+		Name:   name,
+	}, nil
 }

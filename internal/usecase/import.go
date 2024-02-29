@@ -6,12 +6,20 @@ import (
 	"log"
 )
 
-type ImportUsecase struct {
-	CompanyService service.ICompanyService
+type FileExporterInterface interface {
+	Send(ctx context.Context, bucket, name string)
 }
 
-func NewImportUsecase(c service.ICompanyService) *ImportUsecase {
-	return &ImportUsecase{c}
+type ImportUsecase struct {
+	CompanyService service.ICompanyService
+	FileExporter   FileExporterInterface
+}
+
+func NewImportUsecase(
+	c service.ICompanyService,
+	e FileExporterInterface,
+) *ImportUsecase {
+	return &ImportUsecase{c, e}
 }
 
 func (u *ImportUsecase) ImportCompany(
@@ -19,10 +27,12 @@ func (u *ImportUsecase) ImportCompany(
 	company string,
 	body []byte,
 ) error {
-	err := u.CompanyService.ImportCompany(ctx, body, company)
+	r, err := u.CompanyService.ImportCompany(ctx, body, company)
 	if err != nil {
 		log.Println(err)
 	}
+
+	u.FileExporter.Send(ctx, r.Bucket, r.Name)
 	//dec := json.NewDecoder(bytes.NewReader(body))
 	//r := &model.Company{}
 	//

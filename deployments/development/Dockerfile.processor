@@ -1,0 +1,12 @@
+FROM golang
+
+WORKDIR /app
+
+COPY ./go.mod ./
+RUN go mod download
+
+COPY --chown=app:app . .
+
+
+
+CMD go run ./cmd/file_processor/main.go

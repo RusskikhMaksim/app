@@ -10,7 +10,7 @@ type ICompanyService interface {
 		ctx context.Context,
 		data []byte,
 		companyName string,
-	) error
+	) (*repository.CompanyRepositoryCreateResponse, error)
 }
 
 type CompanyService struct {
@@ -27,11 +27,12 @@ func (s *CompanyService) ImportCompany(
 	ctx context.Context,
 	data []byte,
 	companyName string,
-) error {
-	err := s.companyRepo.Create(ctx, data, companyName)
+) (*repository.CompanyRepositoryCreateResponse, error) {
+	r, err := s.companyRepo.Create(ctx, data, companyName)
+
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	return r, nil
 }

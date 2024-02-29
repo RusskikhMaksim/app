@@ -2,7 +2,10 @@ package app
 
 import (
 	"app/internal/adapter/webapi/storage"
+	"app/internal/consumers"
 	"app/internal/domain/service"
+	"app/internal/domain/service/producersservices"
+	"app/internal/producers"
 	"app/internal/registry"
 	"app/internal/usecase"
 	"fmt"
@@ -14,16 +17,18 @@ import (
 func NewContainer(
 	config *Config,
 ) (*registry.Container, error) {
+	queueClients := newQueueClients(config)
 	httpClients, err := newHttpClients(config)
 	if err != nil {
 		return nil, err
 	}
 
 	repositories := newRepositories(config, httpClients)
-	services := newServices(repositories)
+	services := newServices(repositories, queueClients)
 	usecases := newUsecases(services)
 
 	return &registry.Container{
+		QueueClientx: queueClients,
 		HttpClients:  httpClients,
 		Repositories: repositories,
 		Services:     services,
@@ -31,7 +36,21 @@ func NewContainer(
 	}, nil
 }
 
+func newQueueClients(config *Config) *registry.QueueClients {
+	return &registry.QueueClients{
+		Kafka: &registry.KafkaClients{
+			Producers: &registry.Producers{
+				FileProcessed: producers.NewFileProcessed(config.Queue.Kafka.ClientConfig),
+			},
+			Consumers: &registry.Consumers{
+				FileProcessed: consumers.NewFileProcessorConsumerGroupHandler(),
+			},
+		},
+	}
+}
+
 func newHttpClients(config *Config) (*registry.HttpClients, error) {
+	_ = 1
 	client, err := minio.New(
 		config.S3Api.Host,
 		&minio.Options{
@@ -63,14 +82,15 @@ func newRepositories(
 	}
 }
 
-func newServices(r *registry.Repositories) *registry.Services {
+func newServices(r *registry.Repositories, q *registry.QueueClients) *registry.Services {
 	return &registry.Services{
-		CompanyService: service.NewCompanyService(r.CompanyRepository),
+		CompanyService:      service.NewCompanyService(r.CompanyRepository),
+		FileExporterService: producersservices.NewFileExporterService(q.Kafka.Producers.FileProcessed),
 	}
 }
 
 func newUsecases(s *registry.Services) *registry.Usecases {
 	return &registry.Usecases{
-		Import: usecase.NewImportUsecase(s.CompanyService),
+		Import: usecase.NewImportUsecase(s.CompanyService, s.FileExporterService),
 	}
 }
