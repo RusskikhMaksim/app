@@ -1,0 +1,105 @@
+version: '3'
+
+x-kafka-broker-env-base: &kafka_broker_env_base
+  KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+  KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: EXTERNAL:PLAINTEXT,INTERNAL:PLAINTEXT
+  KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+  KAFKA_CONFLUENT_TOPIC_REPLICATION_FACTOR: 1
+  KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+
+x-kafka-broker-base: &kafka_broker_base
+  image: kafka-jmx
+  healthcheck:
+    test: kafka-topics --bootstrap-server localhost:9092 --list || exit 1
+    start_period: 30s
+    timeout: 5s
+    interval: 3s
+    retries: 100
+  depends_on:
+    zookeeper:
+      condition: service_healthy
+
+
+services:
+  zookeeper:
+    image: zookeeper-jmx
+    hostname: zookeeper
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    healthcheck:
+      test: jps -l | grep zookeeper || exit 1
+      start_period: 1s
+      timeout: 5s
+      interval: 3s
+      retries: 100
+
+  kafka1:
+    <<: *kafka_broker_base
+    container_name: kafka1
+    ports:
+      - "19092:19092"
+    environment:
+      <<: *kafka_broker_env_base
+      KAFKA_BROKER_ID: 1
+      KAFKA_ADVERTISED_LISTENERS: EXTERNAL://localhost:19092,INTERNAL://kafka1:9092
+
+
+  api:
+    build:
+      context: ../../
+      dockerfile: deployments/development/Dockerfile.api
+    volumes:
+      - ../../:/app/
+      - .env:/app/.env
+    environment:
+      LD_FLAGS: -X 'main.branchName=$(git rev-parse --abbrev-ref HEAD)'
+    ports:
+      - ${APPLICATION_PORT}${APPLICATION_PORT}
+
+  processor-1:
+    build:
+      context: ../../
+      dockerfile: deployments/development/Dockerfile.processor
+    volumes:
+      - ../../:/app/
+      - .env:/app/.env
+    environment:
+      LD_FLAGS: -X 'main.branchName=$(git rev-parse --abbrev-ref HEAD)'
+#    ports:
+#      - ${PROCESSOR_PORT}${PROCESSOR_PORT}
+
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_storage:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    environment:
+      MINIO_ROOT_USER: user
+      MINIO_ROOT_PASSWORD: password
+    command: server --console-address ":9001" /data
+
+  createbucket:
+    image: minio/mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc config host add minio http://minio:9000 ${S3_API_USER} ${S3_API_PASSWORD};
+      /usr/bin/mc mb minio/companies;
+      exit 0;
+      "
+
+volumes:
+  minio_storage: { }
